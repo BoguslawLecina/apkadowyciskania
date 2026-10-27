@@ -150,6 +150,11 @@ select{width:100%;padding:9px 10px;border-radius:10px;border:1px dashed var(--li
 .err{color:var(--fail);font-size:14px;margin:6px 4px}
 .ok-msg{color:var(--ok);font-size:14px;margin:6px 4px}
 .note{font-size:13px;color:var(--muted);margin-top:2px}
+.wadj{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.wadj .mini button{width:40px;height:40px;font-size:20px}
+.bw{font-size:34px}
+.pull .val.top{color:var(--ok)}
+.pull .val.low{color:var(--fail)}
 
 </style>
 </head>
@@ -172,7 +177,7 @@ const KEY='sl5x5-state-v1', BKEY='sl5x5-backups', DAY=86400000;
 const PLATES=[25,20,15,10,5,2.5,1.25,0.5];
 const PSTYLE={25:['var(--p25)',58,13],20:['var(--p20)',58,12],15:['var(--p15)',50,11],10:['var(--p10)',42,10],5:['var(--p5)',32,8],2.5:['var(--p25)',26,6],1.25:['var(--steel)',22,5],0.5:['var(--steel)',18,4]};
 const KINDS={weight:'Ciężar',reps:'Powtórzenia',check:'Odhaczanie'};
-const KIND_HELP={weight:'Po udanym treningu aplikacja dokłada ciężar, a po 3 nieudanych z rzędu robi deload o 10%.',reps:'Wpisujesz liczbę powtórzeń w każdej serii, np. podciąganie.',check:'Odhaczasz zrobione serie, np. ćwiczenia dodatkowe.'};
+const KIND_HELP={weight:'Stała liczba powtórzeń (np. 5 × 5): ciężar rośnie, gdy zaliczysz wszystkie serie. Zakres (np. 8–12): ciężar rośnie, gdy we wszystkich seriach zrobisz górną granicę. Po 3 nieudanych podejściach z rzędu deload o 10%.',reps:'Wpisujesz liczbę powtórzeń w każdej serii, np. podciąganie.',check:'Odhaczasz zrobione serie, np. ćwiczenia dodatkowe.'};
 
 const r2=x=>Math.round(x*100)/100;
 const roundTo=(x,s)=>r2(Math.round(x/s)*s);
@@ -181,8 +186,10 @@ const clone=o=>JSON.parse(JSON.stringify(o));
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 
-function ex(o){return Object.assign({name:'Nowe ćwiczenie',kind:'weight',sets:5,reps:5,w:20,f:0,inc:2.5,microFrom:null,microInc:1,bar:20,lightFrom:null,note:''},o);}
-function seed(){return{v:2,
+function ex(o){return Object.assign({name:'Nowe ćwiczenie',kind:'weight',sets:5,reps:5,repsMax:null,unit:'powt.',step:1,w:20,f:0,inc:2.5,microFrom:null,microInc:1,bar:20,lightFrom:null,note:''},o);}
+const fmtW=w=>w>0?fmt(w)+' kg':'masa ciała';
+function seed(){return upgrade3(seed2());}
+function seed2(){return{v:2,
   exercises:{
     squat:ex({name:'Przysiad',w:50,lightFrom:75}),
     bench:ex({name:'Wyciskanie leżąc',w:40,microFrom:60,microInc:1}),
@@ -195,14 +202,42 @@ function seed(){return{v:2,
     core:ex({name:'Plank lub ab wheel',kind:'check',sets:3,note:'3 serie'})
   },
   workouts:[{id:'A',name:'Trening A',items:['squat','bench','row','pullo','face']},{id:'B',name:'Trening B',items:['squat','ohp','dead','pullu','core']}],
-  next:0,rest:{ok:180,fail:300},session:null,history:[],lastExport:0,updatedAt:0};}
+  next:0,rest:{ok:180,fail:300,acc:90},session:null,history:[],lastExport:0,updatedAt:0};}
+
+/* ---------- version 3: plan A/B/C ---------- */
+function upgrade3(s){
+  const E=s.exercises,add=(id,o)=>{if(!E[id])E[id]=ex(Object.assign({bar:0,inc:2,sets:3},o));};
+  if(E.squat)E.squat.lightFrom=null;
+  add('calfst',{name:'Wspięcia na palce stojąc, na jednej nodze',w:0,reps:10,repsMax:15,note:'na nogę, pauza na dole, powolne opuszczanie'});
+  add('triohe',{name:'Prostowanie ramion z hantlą nad głową',w:12,reps:10,repsMax:12,note:'jedna hantla, oburącz'});
+  add('stepup',{name:'Wejścia na wysoką skrzynię',w:10,reps:8,repsMax:10,note:'na nogę, hantle, kg na rękę'});
+  add('slrdl',{name:'Martwy ciąg na jednej nodze',w:12,reps:8,repsMax:10,note:'na nogę, jedna hantla'});
+  add('pdsup',{name:'Ściąganie drążka podchwytem',w:40,inc:2.5,reps:8,repsMax:12});
+  add('calfsit',{name:'Wspięcia na palce siedząc',w:30,inc:2.5,reps:12,repsMax:20});
+  add('bss',{name:'Przysiad bułgarski',w:8,reps:8,repsMax:10,note:'na nogę, 3 s opuszczania, kg na rękę'});
+  add('lstep',{name:'Zejście bokiem ze stepu',w:0,reps:8,repsMax:12,note:'na nogę, kolano w linii stopy'});
+  add('incdb',{name:'Wyciskanie hantli na skosie',w:16,reps:8,repsMax:12,note:'kg na rękę'});
+  add('pdpro',{name:'Ściąganie drążka nachwytem',w:40,inc:2.5,reps:8,repsMax:12});
+  add('farmer',{name:'Farmer walks',w:20,reps:30,repsMax:40,unit:'m',step:5,note:'kg na rękę'});
+  if(!E.face)E.face=ex({name:'Face pulls',kind:'check',sets:3,note:'3 serie po 15, lekko'});
+  s.workouts=[
+    {id:'A',name:'Trening A',items:['squat','bench','row','calfst','triohe']},
+    {id:'B',name:'Trening B',items:['stepup','slrdl','ohp','pdsup','calfsit','face']},
+    {id:'C',name:'Trening C',items:['dead','bss','lstep','incdb','pdpro','farmer']}
+  ].map(W=>(W.items=W.items.filter(id=>E[id]),W));
+  if(!(s.next>=0&&s.next<3))s.next=0;
+  s.session=null;s.v=3;
+  s.rest=Object.assign({ok:180,fail:300,acc:90},s.rest||{});
+  return s;
+}
 
 /* ---------- migration from version 1 ---------- */
 const V1N={squat:'Przysiad',bench:'Wyciskanie leżąc',row:'Wiosłowanie sztangą',ohp:'Wyciskanie nad głowę',dead:'Martwy ciąg'};
 function migrate(raw){
   if(!raw||typeof raw!=='object')return seed();
-  if(raw.v===2&&raw.exercises&&raw.workouts){const s=Object.assign(seed(),raw);if(!s.rest)s.rest={ok:180,fail:300};return s;}
-  const s=seed(),L=raw.lifts||{};
+  if(raw.v===3&&raw.exercises&&raw.workouts){const s=Object.assign(seed(),raw);s.rest=Object.assign({ok:180,fail:300,acc:90},s.rest||{});return s;}
+  if(raw.v===2&&raw.exercises&&raw.workouts){const s=Object.assign(seed2(),clone(raw));Object.keys(s.exercises).forEach(k=>s.exercises[k]=ex(s.exercises[k]));return upgrade3(s);}
+  const s=seed2(),L=raw.lifts||{};
   Object.keys(V1N).forEach(k=>{if(L[k]&&isFinite(L[k].w)){s.exercises[k].w=L[k].w;s.exercises[k].f=L[k].f||0;}});
   if(raw.lightWed===false)s.exercises.squat.lightFrom=null;
   if(raw.rest)s.rest=raw.rest;
@@ -226,7 +261,7 @@ function migrate(raw){
     });
     s.session=ns;
   }
-  return s;
+  return upgrade3(s);
 }
 
 /* ---------- backups ---------- */
@@ -240,7 +275,7 @@ function snapshot(reason,data){
 let state;
 try{
   const s=localStorage.getItem(KEY);
-  if(s){const raw=JSON.parse(s);if(raw.v!==2)snapshot('Przed aktualizacją aplikacji',raw);state=migrate(raw);}
+  if(s){const raw=JSON.parse(s);if(raw.v!==3)snapshot('Przed aktualizacją aplikacji',raw);state=migrate(raw);}
   else state=seed();
 }catch(e){state=seed();}
 try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}
@@ -288,7 +323,7 @@ function newSession(idx,st){
   const items=W.items.filter(id=>st.exercises[id]).map(id=>{
     const E=st.exercises[id];
     const light=E.kind==='weight'&&E.lightFrom!=null&&wed&&E.w>=E.lightFrom;
-    return{id,name:E.name,kind:E.kind,sets:E.sets,reps:E.reps,note:E.note,bar:E.bar,w:light?lightW(E):E.w,light,vals:Array(E.sets).fill(E.kind==='check'?false:null)};
+    return{id,name:E.name,kind:E.kind,sets:E.sets,reps:E.reps,repsMax:E.repsMax||null,unit:E.unit||'powt.',step:E.step||1,note:E.note,bar:E.bar,w:light?lightW(E):E.w,light,vals:Array(E.sets).fill(E.kind==='check'?false:null)};
   });
   return{wid:W.id,name:W.name,started:Date.now(),items};
 }
@@ -325,14 +360,16 @@ function finish(){
   s.items.forEach(it=>{
     if(it.kind==='weight'){
       if(it.vals.every(v=>v===null))return;
-      items.push({id:it.id,name:it.name,kind:'weight',w:it.w,vals:it.vals.slice(),light:it.light});
+      items.push({id:it.id,name:it.name,kind:'weight',w:it.w,vals:it.vals.slice(),light:it.light,unit:it.unit});
       const E=state.exercises[it.id];if(!E||E.kind!=='weight')return;
-      if(it.light){notes.push(it.name+': lżejszy dzień, ciężar bez zmian ('+fmt(E.w)+' kg).');return;}
-      if(it.vals.every(v=>v!==null&&v>=it.reps)){E.w=r2(E.w+incFor(E));E.f=0;notes.push(it.name+': następnym razem '+fmt(E.w)+' kg.');}
+      if(it.light){notes.push(it.name+': lżejszy dzień, ciężar bez zmian ('+fmtW(E.w)+').');return;}
+      const top=it.repsMax||it.reps;
+      if(it.vals.every(v=>v!==null&&v>=top)){E.w=r2(E.w+incFor(E));E.f=0;notes.push(it.name+': '+(it.repsMax?'górny zakres zrobiony, ':'')+'następnym razem '+fmtW(E.w)+'.');}
+      else if(it.repsMax&&it.vals.every(v=>v===null||v>=it.reps)){E.f=0;notes.push(it.name+': zostajesz na '+fmtW(E.w)+', celuj w więcej powtórzeń.');}
       else{
         E.f=(E.f||0)+1;
-        if(E.f>=3){E.w=Math.max(E.bar||0,roundTo(E.w*0.9,2.5));E.f=0;notes.push(it.name+': trzecie nieudane podejście, deload do '+fmt(E.w)+' kg.');}
-        else notes.push(it.name+': nieudane podejście '+E.f+' z 3, zostajesz na '+fmt(E.w)+' kg.');
+        if(E.f>=3){E.w=Math.max(E.bar||0,roundTo(E.w*0.9,E.bar?2.5:1));E.f=0;notes.push(it.name+': trzecie nieudane podejście, deload do '+fmtW(E.w)+'.');}
+        else notes.push(it.name+': nieudane podejście '+E.f+' z 3, zostajesz na '+fmtW(E.w)+'.');
       }
     }else if(it.kind==='reps'){
       if(it.vals.some(v=>v!==null))items.push({id:it.id,name:it.name,kind:'reps',vals:it.vals.slice()});
@@ -379,7 +416,7 @@ document.getElementById('importFile').addEventListener('change',async e=>{
   const f=e.target.files&&e.target.files[0];e.target.value='';if(!f)return;
   try{
     const raw=JSON.parse(await f.text());
-    if(!raw||!((raw.v===2&&raw.exercises&&raw.workouts)||raw.lifts))throw new Error('format');
+    if(!raw||!((raw.v>=2&&raw.exercises&&raw.workouts)||raw.lifts))throw new Error('format');
     snapshot('Przed wczytaniem kopii');
     state=migrate(raw);state.session=null;persist();
     msg='Kopia wczytana: '+state.history.length+' treningów w historii.';msgOk=true;
@@ -403,8 +440,9 @@ document.getElementById('tskip').onclick=stopTimer;
 
 /* ---------- render ---------- */
 const $app=document.getElementById('app');
+function scheme(E){return E.reps+(E.repsMax?'–'+E.repsMax:'')+(E.unit&&E.unit!=='powt.'?' '+E.unit:'');}
 function summary(E){
-  if(E.kind==='weight')return fmt(E.w)+' kg, '+E.sets+' × '+E.reps;
+  if(E.kind==='weight')return fmtW(E.w)+', '+E.sets+' × '+scheme(E);
   if(E.kind==='reps')return E.sets+' serie, powtórzenia';
   return E.sets+' serie do odhaczenia';
 }
@@ -420,12 +458,17 @@ function loaderHTML(W,bar){
 function itemCard(it,n){
   const E=state.exercises[it.id];
   if(it.kind==='weight'){
-    let h='<section class="lift"><div class="lift-top"><h2>'+esc(it.name)+'</h2><span class="scheme">'+it.sets+' × '+it.reps+'</span></div>';
-    h+='<div class="weight">'+fmt(it.w)+'<small>kg</small></div>';
+    let h='<section class="lift"><div class="lift-top"><h2>'+esc(it.name)+'</h2><span class="scheme">'+it.sets+' × '+scheme(it)+'</span></div>';
+    h+='<div class="wadj"><div class="weight">'+(it.w>0?fmt(it.w)+'<small>kg</small>':'<span class="bw">masa ciała</span>')+'</div><div class="mini"><button data-a="wm" data-n="'+n+'" aria-label="Zmniejsz ciężar">−</button><button data-a="wp" data-n="'+n+'" aria-label="Zwiększ ciężar">+</button></div></div>';
     if(it.light&&E)h+='<div class="hint">Lżejszy dzień: 85% z '+fmt(E.w)+' kg, bez progresji.</div>';
     else if(E&&E.f>0)h+='<div class="hint warn">Nieudane podejścia na tym ciężarze: '+E.f+' z 3</div>';
     if(it.note)h+='<div class="note">'+esc(it.note)+'</div>';
     if(it.bar>0)h+=loaderHTML(it.w,it.bar);
+    if(it.repsMax){
+      h+='<div class="pulls">';
+      it.vals.forEach((v,i)=>{const c=v===null?' none':(v>=it.repsMax?' top':(v<it.reps?' low':''));h+='<div class="pull"><button data-a="pm" data-n="'+n+'" data-i="'+i+'" aria-label="Mniej">−</button><button class="val'+c+'" data-a="pv" data-n="'+n+'" data-i="'+i+'" aria-label="Seria '+(i+1)+'">'+(v===null?'–':v)+'</button><button data-a="pp" data-n="'+n+'" data-i="'+i+'" aria-label="Więcej">+</button></div>';});
+      return h+'</div></section>';
+    }
     h+='<div class="sets">';
     it.vals.forEach((v,i)=>{const cls=v===null?'':(v>=it.reps?'done':'miss');h+='<button class="set '+cls+'" data-a="set" data-n="'+n+'" data-i="'+i+'" aria-label="Seria '+(i+1)+': '+(v===null?'nie zrobiona':v+' powtórzeń')+'">'+(v===null?'':v)+'</button>';});
     h+='</div>';
@@ -474,7 +517,7 @@ function renderHist(){
     const d=new Date(e.date).toLocaleDateString('pl-PL',{weekday:'short',day:'numeric',month:'short'});
     h+='<div class="hist"><div class="hist-top"><b>'+esc(e.name)+'</b><span>'+d+'</span></div>';
     (e.items||[]).forEach(x=>{
-      if(x.kind==='weight')h+='<div class="hrow"><span>'+esc(x.name)+(x.light?' (lżej)':'')+'</span><span class="w">'+fmt(x.w)+' kg</span><span class="r">'+x.vals.map(r=>r===null?'–':r).join(' ')+'</span></div>';
+      if(x.kind==='weight')h+='<div class="hrow"><span>'+esc(x.name)+(x.light?' (lżej)':'')+'</span><span class="w">'+(x.w>0?fmt(x.w)+' kg':'')+'</span><span class="r">'+x.vals.map(r=>r===null?'–':r).join(' ')+(x.unit==='m'?' m':(x.unit==='s'?' s':''))+'</span></div>';
       else if(x.kind==='reps')h+='<div class="hrow"><span>'+esc(x.name)+'</span><span class="w"></span><span class="r">'+x.vals.filter(v=>v!==null).join(' ')+'</span></div>';
       else h+='<div class="hrow"><span>'+esc(x.name)+'</span><span class="w"></span><span class="r">'+x.done+'/'+x.sets+'</span></div>';
     });
@@ -513,7 +556,8 @@ function renderSet(){
   h+='</div><button class="ghost" data-a="newex">Nowe ćwiczenie</button>';
   h+='<h4>Przerwy</h4><div class="setting">';
   h+='<div class="srow"><label for="ro">Po udanej serii<span class="meta">sekundy</span></label><input type="number" inputmode="numeric" id="ro" data-r="ok" value="'+state.rest.ok+'"></div>';
-  h+='<div class="srow"><label for="rf">Po nieudanej serii<span class="meta">sekundy</span></label><input type="number" inputmode="numeric" id="rf" data-r="fail" value="'+state.rest.fail+'"></div></div>';
+  h+='<div class="srow"><label for="rf">Po nieudanej serii<span class="meta">sekundy</span></label><input type="number" inputmode="numeric" id="rf" data-r="fail" value="'+state.rest.fail+'"></div>';
+  h+='<div class="srow"><label for="ra">Ćwiczenia dodatkowe<span class="meta">sekundy, ćwiczenia z zakresem powtórzeń</span></label><input type="number" inputmode="numeric" id="ra" data-r="acc" value="'+(state.rest.acc||90)+'"></div></div>';
   h+='<h4>Kopia zapasowa</h4><div class="setting">';
   h+='<div class="srow"><span class="name">Plik z kopią<span class="meta">Ostatnio: '+(state.lastExport?new Date(state.lastExport).toLocaleDateString('pl-PL'):'jeszcze nie było')+'. Zapisz go w iCloud Drive.</span></span></div>';
   h+='<div class="srow"><div class="btnrow" style="margin:0"><button class="small" data-a="export">Zapisz kopię</button><button class="small" data-a="import">Wczytaj z pliku</button></div></div>';
@@ -542,7 +586,10 @@ function renderEdit(){
   h+='<div class="srow"><label>Rodzaj</label><div class="seg">'+Object.keys(KINDS).map(k=>'<button data-a="kind" data-v="'+k+'" aria-pressed="'+(d.kind===k)+'">'+KINDS[k]+'</button>').join('')+'</div></div>';
   h+=field('Serie','sets',d.sets);
   if(d.kind==='weight'){
-    h+=field('Powtórzenia w serii','reps',d.reps);
+    h+=field(d.repsMax?'Powtórzenia od':'Powtórzenia w serii','reps',d.reps);
+    h+=field('Powtórzenia do','repsMax',d.repsMax,{meta:'puste = stała liczba, jak 5 × 5',ph:'brak'});
+    h+='<div class="srow"><label>Jednostka</label><div class="seg">'+['powt.','m','s'].map(u=>'<button data-a="unit" data-v="'+u+'" aria-pressed="'+((d.unit||'powt.')===u)+'">'+u+'</button>').join('')+'</div></div>';
+    h+=field('Krok przy wpisywaniu','step',d.step,{meta:'np. 5 dla metrów'});
     h+=field('Ciężar roboczy','w',d.w,{meta:'kg'});
     h+=field('Skok po udanym treningu','inc',d.inc,{meta:'kg'});
     h+=field('Mniejszy skok od','microFrom',d.microFrom,{meta:'kg, puste = nigdy',ph:'nigdy'});
@@ -565,7 +612,7 @@ function render(){
 function openEdit(id,addTo){
   const E=state.exercises[id]||ex({});
   editId=id;editAddTo=addTo;
-  draft={name:E.name,kind:E.kind,sets:E.sets,reps:E.reps,w:E.w,inc:E.inc,microFrom:E.microFrom,microInc:E.microInc,bar:E.bar,lightFrom:E.lightFrom,note:E.note};
+  draft={name:E.name,kind:E.kind,sets:E.sets,reps:E.reps,repsMax:E.repsMax,unit:E.unit||'powt.',step:E.step||1,w:E.w,inc:E.inc,microFrom:E.microFrom,microInc:E.microInc,bar:E.bar,lightFrom:E.lightFrom,note:E.note};
   if(!state.exercises[id])draft.name='';
   tab='edit';armed='';render();window.scrollTo({top:0});
 }
@@ -577,7 +624,10 @@ function saveEdit(){
   E.name=name;E.kind=d.kind;E.note=String(d.note||'').trim();
   E.sets=Math.min(10,Math.max(1,Math.round(num(d.sets)||1)));
   if(d.kind==='weight'){
-    E.reps=Math.min(50,Math.max(1,Math.round(num(d.reps)||5)));
+    E.reps=Math.min(500,Math.max(1,Math.round(num(d.reps)||5)));
+    const rm=num(d.repsMax);E.repsMax=rm!==null&&rm>E.reps?Math.round(rm):null;
+    E.unit=['powt.','m','s'].includes(d.unit)?d.unit:'powt.';
+    const stp=num(d.step);E.step=stp!==null&&stp>0?Math.round(stp):1;
     const w=num(d.w);if(w!==null&&w>=0){if(!old||old.w!==w)E.f=0;E.w=r2(w);}
     const inc=num(d.inc);E.inc=inc!==null&&inc>0?inc:2.5;
     E.microFrom=num(d.microFrom);
@@ -603,9 +653,10 @@ $app.addEventListener('click',e=>{
   if(a==='set'){const v=it.vals[i],nv=v===null?it.reps:(v===0?null:v-1);it.vals[i]=nv;
     if(nv===it.reps)startTimer(state.rest.ok,'Odpoczynek');else if(nv!==null)startTimer(state.rest.fail,'Dłuższy odpoczynek');else stopTimer();
     persist();render();return;}
-  if(a==='pv'){if(it.vals[i]===null){const prev=state.history.map(h=>(h.items||[]).find(x=>x.id===it.id&&x.kind==='reps')).find(x=>x&&x.vals[i]!=null);it.vals[i]=prev?prev.vals[i]:5;startTimer(120,'Odpoczynek');}persist();render();return;}
-  if(a==='pp'){it.vals[i]=(it.vals[i]===null?0:it.vals[i])+1;persist();render();return;}
-  if(a==='pm'){if(it.vals[i]!==null)it.vals[i]=it.vals[i]<=0?null:it.vals[i]-1;persist();render();return;}
+  if(a==='pv'){if(it.vals[i]===null){const prev=state.history.map(h=>(h.items||[]).find(x=>x.id===it.id&&x.kind===it.kind&&(x.w===undefined||x.w===it.w))).find(x=>x&&x.vals[i]!=null);it.vals[i]=prev?prev.vals[i]:(it.kind==='weight'?it.reps:5);startTimer(state.rest.acc||90,'Odpoczynek');}persist();render();return;}
+  if(a==='pp'){const st=it.step||1;it.vals[i]=(it.vals[i]===null?(it.kind==='weight'?it.reps-st:0):it.vals[i])+st;if(it.vals[i]===it.reps&&it.kind==='weight')startTimer(state.rest.acc||90,'Odpoczynek');persist();render();return;}
+  if(a==='pm'){const st=it.step||1;if(it.vals[i]!==null)it.vals[i]=it.vals[i]<=0?null:Math.max(0,it.vals[i]-st);persist();render();return;}
+  if(a==='wm'||a==='wp'){const E=state.exercises[it.id];const st=E?incFor(E):2.5;it.w=Math.max(0,r2(it.w+(a==='wp'?st:-st)));if(E&&!it.light){E.w=it.w;E.f=0;}persist();render();return;}
   if(a==='acc'){it.vals[i]=!it.vals[i];if(it.vals[i])startTimer(75,'Odpoczynek');persist();render();return;}
   if(a==='light'){const E=state.exercises[it.id];if(E){it.light=!it.light;it.w=it.light?lightW(E):E.w;}persist();render();return;}
   if(a==='swap'){state.session=newSession((curIdx()+1)%state.workouts.length);persist();render();return;}
@@ -625,6 +676,7 @@ $app.addEventListener('click',e=>{
   if(a==='edit'){openEdit(b.dataset.id,null);return;}
   if(a==='newex'){openEdit(uid('e'),null);return;}
   if(a==='kind'){draft.kind=b.dataset.v;render();return;}
+  if(a==='unit'){draft.unit=b.dataset.v;render();return;}
   if(a==='save'){saveEdit();return;}
   if(a==='cancel'){tab='set';draft=null;render();return;}
   if(a==='delex'){if(wasArmed!=='delex'){armed='delex';render();return;}
@@ -638,7 +690,7 @@ $app.addEventListener('click',e=>{
     snapshot('Przed wyczyszczeniem danych');state=seed();lastResult=null;stopTimer();persist();tab='train';render();return;}
   render();
 });
-$app.addEventListener('input',e=>{const t=e.target;if(t.dataset.f&&draft)draft[t.dataset.f]=t.value;});
+$app.addEventListener('input',e=>{const t=e.target;if(t.dataset.f&&draft){draft[t.dataset.f]=t.value;}});
 $app.addEventListener('change',e=>{
   const t=e.target;
   if(t.dataset.wname!==undefined){const W=state.workouts[+t.dataset.wname],v=t.value.trim();if(W&&v){W.name=v;if(state.session&&state.session.wid===W.id)state.session.name=v;persist();}render();return;}
